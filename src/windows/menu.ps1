@@ -369,12 +369,13 @@ function Show-Documentation {
             }
         }
         '2' {
-            $descPath = Join-Path -Path $ModulePath -ChildPath "Descripcion.md"
+            $descPath = Join-Path -Path $PSScriptRoot -ChildPath "..\..\docs\arquitectura\modulo_descripcion.md"
+            $descPath = (Resolve-Path $descPath).Path
             if (Test-Path $descPath) {
                 Start-Process notepad.exe -ArgumentList $descPath
                 Write-Success "Abriendo descripción técnica..."
             } else {
-                Write-Error "No se encontró el archivo Descripcion.md"
+                Write-Error "No se encontró el archivo modulo_descripcion.md en docs/arquitectura/"
             }
         }
         '3' {
