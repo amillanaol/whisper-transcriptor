@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Utilidades para crear Text User Interfaces (TUI) en PowerShell
 
