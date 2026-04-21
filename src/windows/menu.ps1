@@ -1,4 +1,4 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 <#
 .SYNOPSIS
     Menú interactivo de instalación de whisper-transcriptor
@@ -12,6 +12,11 @@
 
 [CmdletBinding()]
 param()
+
+# --- CODIFICACIÓN UTF-8 (necesario para Windows 10) ---
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+chcp 65001 | Out-Null
 
 # --- CONFIGURACIÓN ---
 $ScriptVersion = "1.0.0"
@@ -105,6 +110,23 @@ function Write-Success {
 function Write-Info {
     param([string]$Message)
     Write-Host "  $Message" -ForegroundColor $ColorInfo
+}
+
+function Show-DirectoryBrowser {
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+        $dialog.Description = "Seleccionar directorio de videos"
+        $dialog.ShowNewFolderButton = $false
+        
+        if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+            return $dialog.SelectedPath
+        }
+    }
+    catch {
+        Write-Warning "No se pudo abrir el explorador: $_"
+    }
+    return $null
 }
 
 # --- ACCIONES DEL MENÚ ---
@@ -244,26 +266,46 @@ function Invoke-RunModule {
         return
     }
     
-    # Importar módulo
-    Import-Module whisper-transcriptor -Force
+    # Importar módulo desde código fuente
+    $moduleSrcPath = Join-Path -Path $ModulePath -ChildPath "whisper-transcriptor.psd1"
+    Import-Module $moduleSrcPath -Force
     
+    # Detectar CUDA disponible
+    $cudaAvailable = $false
+    try {
+        $cudaCheck = python -c "import torch; print(torch.cuda.is_available())" 2>&1
+        $cudaAvailable = ($cudaCheck -eq "True")
+    } catch {}
+
     Write-Host "  Opciones de ejecución:" -ForegroundColor $ColorInfo
     Write-Host ""
     Write-Host "  [1] Ejecutar con configuración por defecto" -ForegroundColor $ColorInfo
-    Write-Host "  [2] Especificar directorio de videos" -ForegroundColor $ColorInfo
-    Write-Host "  [3] Seleccionar modelo de Whisper" -ForegroundColor $ColorInfo
-    Write-Host "  [4] Opciones avanzadas (personalizar todo)" -ForegroundColor $ColorInfo
-    Write-Host "  [5] Ver ayuda del módulo" -ForegroundColor $ColorInfo
-    Write-Host "  [6] ⚡ Ejecutar con CUDA (GPU acelerado)" -ForegroundColor $ColorInfo
+    Write-Host "  [2] 📂 Seleccionar directorio (explorador)" -ForegroundColor $ColorInfo
+    Write-Host "  [3] Especificar directorio de videos (escribir ruta)" -ForegroundColor $ColorInfo
+    Write-Host "  [4] Seleccionar modelo de Whisper" -ForegroundColor $ColorInfo
+    Write-Host "  [5] Opciones avanzadas (personalizar todo)" -ForegroundColor $ColorInfo
+    Write-Host "  [6] Ver ayuda del módulo" -ForegroundColor $ColorInfo
+    if ($cudaAvailable) {
+        Write-Host "  [7] ⚡ Ejecutar con CUDA (GPU acelerado)" -ForegroundColor $ColorInfo
+    }
     Write-Host ""
 
-    $runOpt = Read-Host "  Selecciona una opción (1-6)"
-    
+    $maxOpt = if ($cudaAvailable) { "7" } else { "6" }
+    $runOpt = Read-Host "  Selecciona una opción (1-$maxOpt)"
+
     switch ($runOpt) {
         '1' {
             Invoke-whisper-transcriptor
         }
         '2' {
+            $dir = Show-DirectoryBrowser
+            if ($dir) {
+                Invoke-whisper-transcriptor -Directory $dir
+            } else {
+                Write-Info "Selección cancelada"
+            }
+        }
+        '3' {
             $dir = Read-Host "  Ingresa la ruta del directorio de videos"
             if (Test-Path $dir) {
                 Invoke-whisper-transcriptor -Directory $dir
@@ -271,7 +313,7 @@ function Invoke-RunModule {
                 Write-Error "El directorio no existe: $dir"
             }
         }
-        '3' {
+        '4' {
             Write-Host ""
             Write-Host "  Modelos disponibles:" -ForegroundColor $ColorInfo
             Write-Host "    [1] tiny  - Muy rápido, menor precisión" -ForegroundColor $ColorInfo
@@ -281,7 +323,7 @@ function Invoke-RunModule {
             Write-Host "    [5] turbo - Optimizado para velocidad" -ForegroundColor $ColorInfo
             Write-Host ""
             $modelOpt = Read-Host "  Selecciona modelo (1-5)"
-            
+
             $model = switch ($modelOpt) {
                 '1' { 'tiny' }
                 '2' { 'base' }
@@ -290,10 +332,10 @@ function Invoke-RunModule {
                 '5' { 'turbo' }
                 default { 'tiny' }
             }
-            
+
             Invoke-whisper-transcriptor -Model $model
         }
-        '4' {
+        '5' {
             $dir = Read-Host "  Directorio de videos (Enter para ./inputs)"
             if ([string]::IsNullOrWhiteSpace($dir)) { $dir = "./inputs" }
 
@@ -305,36 +347,36 @@ function Invoke-RunModule {
             $ext = Read-Host "  Extensión (Enter para mp4)"
             if ([string]::IsNullOrWhiteSpace($ext)) { $ext = "mp4" }
 
-            Write-Host "  Dispositivo: cpu, cuda" -ForegroundColor $ColorInfo
-            $device = Read-Host "  Dispositivo (Enter para cpu)"
-            if ([string]::IsNullOrWhiteSpace($device)) { $device = "cpu" }
-
-            Invoke-whisper-transcriptor -Directory $dir -Model $model -Extension $ext -Device $device
-        }
-        '5' {
-            Invoke-whisper-transcriptor -Help
+            Invoke-whisper-transcriptor -Directory $dir -Model $model -Extension $ext
         }
         '6' {
-            Write-Host ""
-            Write-Host "  ⚡ CUDA - Modelos disponibles:" -ForegroundColor $ColorInfo
-            Write-Host "    [1] tiny   - Muy rápido, menor precisión" -ForegroundColor $ColorInfo
-            Write-Host "    [2] base   - Rápido, precisión media" -ForegroundColor $ColorInfo
-            Write-Host "    [3] small  - Balance velocidad/precisión" -ForegroundColor $ColorInfo
-            Write-Host "    [4] medium - Lento, alta precisión" -ForegroundColor $ColorInfo
-            Write-Host "    [5] turbo  - Optimizado para velocidad" -ForegroundColor $ColorInfo
-            Write-Host ""
-            $modelOpt = Read-Host "  Selecciona modelo (1-5, Enter para tiny)"
+            Invoke-whisper-transcriptor -Help
+        }
+        '7' {
+            if (-not $cudaAvailable) {
+                Write-Warning "Opción no válida"
+            } else {
+                Write-Host ""
+                Write-Host "  ⚡ CUDA - Modelos disponibles:" -ForegroundColor $ColorInfo
+                Write-Host "    [1] tiny   - Muy rápido, menor precisión" -ForegroundColor $ColorInfo
+                Write-Host "    [2] base   - Rápido, precisión media" -ForegroundColor $ColorInfo
+                Write-Host "    [3] small  - Balance velocidad/precisión" -ForegroundColor $ColorInfo
+                Write-Host "    [4] medium - Lento, alta precisión" -ForegroundColor $ColorInfo
+                Write-Host "    [5] turbo  - Optimizado para velocidad" -ForegroundColor $ColorInfo
+                Write-Host ""
+                $modelOpt = Read-Host "  Selecciona modelo (1-5, Enter para tiny)"
 
-            $model = switch ($modelOpt) {
-                '1' { 'tiny' }
-                '2' { 'base' }
-                '3' { 'small' }
-                '4' { 'medium' }
-                '5' { 'turbo' }
-                default { 'tiny' }
+                $model = switch ($modelOpt) {
+                    '1' { 'tiny' }
+                    '2' { 'base' }
+                    '3' { 'small' }
+                    '4' { 'medium' }
+                    '5' { 'turbo' }
+                    default { 'tiny' }
+                }
+
+                Invoke-whisper-transcriptor -Model $model -Device cuda
             }
-
-            Invoke-whisper-transcriptor -Model $model -Device cuda
         }
         default {
             Write-Warning "Opción no válida"
