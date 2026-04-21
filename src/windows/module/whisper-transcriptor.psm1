@@ -558,9 +558,35 @@ function Invoke-VideoFiles {
             Write-Host "  ═══════════════════════════════════════════════════════════" -ForegroundColor DarkGray
             Write-Host ""
 
-            # Ejecutar Whisper sin ocultar - mostrará su salida directamente
+            # Verificar permisos de escritura en el directorio de salida
+            $targetDir = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) { $videoFile.DirectoryName } else { $OutputDirectory }
+            $testSrtPath = Join-Path -Path $targetDir -ChildPath ".test_write_$(Get-Random).srt"
+            try {
+                "test" | Out-File -FilePath $testSrtPath -Encoding utf8 -ErrorAction Stop
+                Remove-Item -Path $testSrtPath -Force -ErrorAction SilentlyContinue
+                $hasWriteAccess = $true
+            } catch {
+                $hasWriteAccess = $false
+                Write-Host ""
+                Write-Host "  ⚠️  SIN PERMISOS DE ESCRITURA en: $targetDir" -ForegroundColor Red
+                if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+                    Write-Host "  ℹ️  El archivo SRT se guardará en Documents\whisper-output" -ForegroundColor Yellow
+                } else {
+                    Write-Host "  ℹ️  No se puede escribir en el directorio especificado" -ForegroundColor Yellow
+                }
+                Write-Host ""
+                $script:AltOutputDirectory = Join-Path $HOME "Documents\whisper-output"
+                if (-not (Test-Path $script:AltOutputDirectory)) {
+                    New-Item -Path $script:AltOutputDirectory -ItemType Directory -Force | Out-Null
+                }
+            }
+
+            # Ejecutar Whisper con el directorio de salida
             $startTime = Get-Date
-            & whisper "$($videoFile.FullName)" --fp16=False --language Spanish --model $Model --output_format srt --output_dir "$($videoFile.DirectoryName)" --device $Device
+            $outputDir = if ($hasWriteAccess) { $targetDir } else { $script:AltOutputDirectory }
+            $outputDir = $outputDir.TrimEnd('\')
+            $quotedOutputDir = if ($outputDir -match '\s') { "`"$outputDir`"" } else { $outputDir }
+            & whisper "$($videoFile.FullName)" --fp16=False --language Spanish --model $Model --output_format srt --output_dir $quotedOutputDir --device $Device
             $whisperExitCode = $LASTEXITCODE
             $elapsedTime = ((Get-Date) - $startTime).TotalSeconds
 
@@ -583,14 +609,30 @@ function Invoke-VideoFiles {
                 Write-Host ""
                 Write-Host "  El traceback de Python se muestra más arriba." -ForegroundColor White
                 Write-Host "  Desplaza la pantalla hacia arriba para verlo completo." -ForegroundColor DarkGray
-                Write-Host ""
-                Read-Host "  Presiona ENTER para continuar con el siguiente archivo"
                 continue
             }
 
+            # Verificar si el archivo SRT se generó donde se especificó
+            $expectedSrt = Join-Path -Path $outputDir -ChildPath ($videoFile.BaseName + ".srt")
+            $videoDirSrt = Join-Path -Path $videoFile.DirectoryName -ChildPath ($videoFile.BaseName + ".srt")
+            
+            if ((Test-Path $expectedSrt) -and (-not (Test-Path $videoDirSrt))) {
+                Write-Host "  ✓ Archivo SRT generado en: $outputDir" -ForegroundColor Green
+            } elseif (Test-Path $videoDirSrt) {
+                # Whisper lo generó en el directorio del video, copiar al directorio de salida
+                if ($hasWriteAccess -and $outputDir -ne $videoFile.DirectoryName) {
+                    try {
+                        Copy-Item -Path $videoDirSrt -Destination $expectedSrt -Force
+                        Write-Host "  ✓ Copiado a: $outputDir" -ForegroundColor Green
+                    } catch {
+                        Write-Host "  ⚠️  No se pudo copiar, queda en: $videoDirSrt" -ForegroundColor Yellow
+                    }
+                } else {
+                    Write-Host "  ✓ Archivo SRT en: $videoDirSrt" -ForegroundColor Yellow
+                }
+            }
+            
             Write-Host "  ✓ Completado en $([math]::Floor($elapsedTime)) segundos" -ForegroundColor Green
-            Write-Host "  ═══════════════════════════════════════════════════════════" -ForegroundColor DarkGray
-            Write-Host ""
 
             # Limpiar y mostrar completado
             Clear-Host
@@ -602,7 +644,7 @@ function Invoke-VideoFiles {
             Show-ProcessingBox -FileName $videoFile.Name -Status "✅ Completado" -Detail "Subtítulos generados correctamente"
 
             Write-Host ""
-            Write-Host "  💾 Guardado en: $($videoFile.DirectoryName)" -ForegroundColor Green
+            Write-Host "  💾 Guardado en: $outputDir" -ForegroundColor Green
             Write-Host ""
 
             # Pequeña pausa para que el usuario vea el resultado
@@ -635,8 +677,6 @@ function Invoke-VideoFiles {
         Write-Host "  ⏭️  Omitidos (ya tenían .srt): " -NoNewline -ForegroundColor White
         Write-Host "$skippedCount" -ForegroundColor DarkGray
     }
-
-    Write-Host ""
 }
 
 # Crear alias para la función principal
