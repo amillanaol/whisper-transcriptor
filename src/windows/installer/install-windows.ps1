@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Script de instalación completo para whisper-transcriptor en Windows
 .DESCRIPTION
