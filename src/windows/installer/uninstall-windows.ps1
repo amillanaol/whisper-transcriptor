@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Script de desinstalación de whisper-transcriptor para Windows
 .DESCRIPTION
