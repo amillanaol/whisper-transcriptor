@@ -1,5 +1,21 @@
+﻿# --- CODIFICACIÓN UTF-8 (necesario para Windows 10) ---
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+
 # Variable para almacenar la versión del módulo
 $script:Version = "1.2.3"
+
+function Test-CudaAvailable {
+    try {
+        $result = python -c "import torch; print(torch.cuda.is_available())" 2>&1
+        return ($result -eq "True")
+    }
+    catch {
+        return $false
+    }
+}
+
+$script:CudaAvailable = Test-CudaAvailable
 
 function Get-VideoDuration {
     param (
@@ -79,8 +95,8 @@ function Show-ProcessingSummary {
     # Limpiar la consola para una mejor experiencia visual
     Clear-Host
 
-    # Obtener archivos de video
-    $videoFiles = Get-ChildItem -Path $Directory -Recurse -Filter "*.$Extension" -ErrorAction SilentlyContinue
+    # Obtener archivos de video (sin recurse para evitar subcarpetas)
+    $videoFiles = Get-ChildItem -Path $Directory -Filter "*.$Extension" -ErrorAction SilentlyContinue
 
     if ($videoFiles.Count -eq 0) {
         Write-Host ""
@@ -124,7 +140,8 @@ function Show-ProcessingSummary {
     Write-Host "*.$Extension" -ForegroundColor Cyan
     Write-Host "    ⚡ Dispositivo   : " -NoNewline -ForegroundColor White
     $deviceColor = if ($Device -eq 'cuda') { 'Green' } else { 'Cyan' }
-    Write-Host "$Device" -ForegroundColor $deviceColor
+    $deviceLabel = if ($Device -eq 'cuda') { 'cuda (GPU)' } else { 'cpu' }
+    Write-Host "$deviceLabel" -ForegroundColor $deviceColor
     Write-Host ""
 
     # Estadísticas
@@ -210,23 +227,45 @@ function Show-ProcessingSummary {
         return [PSCustomObject]@{ Proceed = $false; Device = $Device }
     }
 
-    # Selección de dispositivo
-    Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
-    Write-Host ""
-    Write-Host "  ⚡ Dispositivo de procesamiento:" -ForegroundColor Yellow
-    Write-Host "    [1] cpu  - Procesamiento estándar (CPU)" -ForegroundColor White
-    Write-Host "    [2] cuda - GPU acelerado (requiere NVIDIA + CUDA)" -ForegroundColor White
-    Write-Host ""
-    $defaultDeviceLabel = if ($Device -eq 'cuda') { '2' } else { '1' }
-    Write-Host "  Selecciona (1-2, Enter para " -NoNewline -ForegroundColor Yellow
-    Write-Host "$Device" -NoNewline -ForegroundColor Cyan
-    Write-Host "): " -NoNewline -ForegroundColor Yellow
-    $deviceChoice = Read-Host
+    # Selección de dispositivo (solo si CUDA está disponible)
+    $selectedDevice = $Device
+    if ($script:CudaAvailable) {
+        Write-Host "  ─────────────────────────────────────────────────────────────" -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  ⚡ Dispositivo de procesamiento:" -ForegroundColor Yellow
+        Write-Host "    [1] cpu  - Procesamiento estándar (CPU)" -ForegroundColor White
+        Write-Host "    [2] cuda - GPU acelerado (NVIDIA CUDA)" -ForegroundColor White
+        Write-Host ""
+        $defaultLabel = if ($Device -eq 'cuda') { '2' } else { '1' }
+        Write-Host "  Selecciona (1-2, Enter para " -NoNewline -ForegroundColor Yellow
+        Write-Host "$Device" -NoNewline -ForegroundColor Cyan
+        Write-Host "): " -NoNewline -ForegroundColor Yellow
+        $deviceChoice = Read-Host
 
-    $selectedDevice = switch ($deviceChoice) {
-        '1' { 'cpu' }
-        '2' { 'cuda' }
-        default { $Device }
+        $selectedDevice = switch ($deviceChoice) {
+            '1' { 'cpu' }
+            '2' { 'cuda' }
+            default { $Device }
+        }
+    }
+
+    # siempre preguntar directorio de salida (útil para archivos individuales)
+    Write-Host ""
+    Write-Host "  📂 DIRECTORIO DE SALIDA:" -ForegroundColor Yellow
+    if ($filesToProcess.Count -eq 1) {
+        Write-Host "    Los subtítulos se guardarán en: " -NoNewline -ForegroundColor White
+        Write-Host "$($filesToProcess[0].DirectoryName)" -ForegroundColor Cyan
+    } else {
+        Write-Host "    Los subtítulos se guardarán junto a los videos" -ForegroundColor Cyan
+    }
+    Write-Host ""
+    Write-Host "  Escribe la ruta (o ENTER para usar el directorio por defecto): " -NoNewline -ForegroundColor Yellow
+    $outputDirInput = Read-Host
+
+    if ($outputDirInput.Trim() -ne '') {
+        $script:CustomOutputDirectory = $outputDirInput.Trim()
+    } else {
+        $script:CustomOutputDirectory = $null
     }
 
     # Confirmación
@@ -245,14 +284,16 @@ function Show-ProcessingSummary {
         Write-Host "║                  INICIANDO PROCESAMIENTO...                    ║" -ForegroundColor Green
         Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Green
         Write-Host ""
-        return [PSCustomObject]@{ Proceed = $true; Device = $selectedDevice }
+        $customOutputDir = $script:CustomOutputDirectory
+        $script:CustomOutputDirectory = $null
+        return [PSCustomObject]@{ Proceed = $true; Device = $selectedDevice; OutputDirectory = $customOutputDir }
     } else {
         Write-Host ""
-        Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Red
+        Write-Host "╔════════════════════════════════════════════════════════════════════════╗" -ForegroundColor Red
         Write-Host "║                  OPERACIÓN CANCELADA POR EL USUARIO            ║" -ForegroundColor Red
         Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Red
         Write-Host ""
-        return [PSCustomObject]@{ Proceed = $false; Device = $selectedDevice }
+        return [PSCustomObject]@{ Proceed = $false; Device = $selectedDevice; OutputDirectory = $null }
     }
 }
 
@@ -269,13 +310,17 @@ function Invoke-whisper-transcriptor {
 
         [Parameter(Mandatory=$false,Position=2)]
         [Alias("e")]
-        [ValidateSet("mp4", "mkv", "webm")]
+        [ValidateSet("mp4", "mkv", "webm", "avi", "mov")]
         [string]$Extension = "mp4",
 
         [Parameter(Mandatory=$false)]
         [Alias("dev")]
         [ValidateSet("cpu", "cuda")]
-        [string]$Device = "cpu",
+        [string]$Device = $(if ($script:CudaAvailable) { "cuda" } else { "cpu" }),
+
+        [Parameter(Mandatory=$false)]
+        [Alias("o")]
+        [string]$OutputDirectory,
 
         [Parameter(Mandatory=$false)]
         [Alias("v")]
@@ -310,7 +355,9 @@ function Invoke-whisper-transcriptor {
         Write-Host "                     (por defecto: mp4)"
         Write-Host "    -Device, -dev    Dispositivo de procesamiento"
         Write-Host "                     Valores permitidos: cpu, cuda"
-        Write-Host "                     (por defecto: cpu)"
+        Write-Host "                     (por defecto: auto-detectado)"
+        Write-Host "    -OutputDirectory, -o Directorio donde guardar los archivos SRT"
+        Write-Host "                     (por defecto: mismo directorio del video)"
         Write-Host "    -Version, -v     Muestra la versión actual del módulo"
         Write-Host "    -Help            Muestra este mensaje de ayuda"
         Write-Host ""
@@ -332,6 +379,15 @@ function Invoke-whisper-transcriptor {
         return 1
     }
 
+    $item = Get-Item -Path $Directory -ErrorAction SilentlyContinue
+    if ($item -and -not $item.PSIsContainer) {
+        $detectedExtension = $item.Extension.TrimStart(".").ToLower()
+        if ($Extension -ne $detectedExtension) {
+            $Extension = $detectedExtension
+        }
+        $Directory = $item.DirectoryName
+    }
+
     # Mostrar resumen y pedir confirmación
     $result = Show-ProcessingSummary -Directory $Directory -Model $Model -Extension $Extension -Device $Device
 
@@ -340,7 +396,7 @@ function Invoke-whisper-transcriptor {
     }
 
     # Procesar archivos con el dispositivo elegido en el diálogo
-    Invoke-VideoFiles -Path $Directory -Extension $Extension -Model $Model -Device $result.Device
+    Invoke-VideoFiles -Path $Directory -Extension $Extension -Model $Model -Device $result.Device -OutputDirectory $result.OutputDirectory
 }
 
 function Test-VideoFileExists {
@@ -440,7 +496,8 @@ function Invoke-VideoFiles {
         [string]$Path,
         [string]$Extension,
         [string]$Model,
-        [string]$Device = "cpu"
+        [string]$Device = "cpu",
+        [string]$OutputDirectory
     )
 
     $videoFiles = Get-ChildItem -Path $Path -Recurse -Filter "*.$Extension" -ErrorAction SilentlyContinue
@@ -451,14 +508,22 @@ function Invoke-VideoFiles {
 
     # Contar archivos a procesar
     foreach ($videoFile in $videoFiles) {
-        $srtFile = Join-Path -Path $videoFile.DirectoryName -ChildPath ($videoFile.BaseName + ".srt")
+        if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+            $srtFile = Join-Path -Path $videoFile.DirectoryName -ChildPath ($videoFile.BaseName + ".srt")
+        } else {
+            $srtFile = Join-Path -Path $OutputDirectory -ChildPath ($videoFile.BaseName + ".srt")
+        }
         if (-not (Test-Path -Path $srtFile)) {
             $totalToProcess++
         }
     }
 
     foreach ($videoFile in $videoFiles) {
-        $srtFile = Join-Path -Path $videoFile.DirectoryName -ChildPath ($videoFile.BaseName + ".srt")
+        if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+            $srtFile = Join-Path -Path $videoFile.DirectoryName -ChildPath ($videoFile.BaseName + ".srt")
+        } else {
+            $srtFile = Join-Path -Path $OutputDirectory -ChildPath ($videoFile.BaseName + ".srt")
+        }
 
         if (-not (Test-Path -Path $srtFile)) {
             $processedCount++
