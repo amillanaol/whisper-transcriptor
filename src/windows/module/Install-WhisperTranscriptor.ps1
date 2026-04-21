@@ -1,4 +1,4 @@
-# Install-whisper-transcriptor.ps1
+﻿# Install-whisper-transcriptor.ps1
 # Script de instalación y configuración automática de whisper-transcriptor
 
 # --- CONFIGURACIÓN INICIAL ---
