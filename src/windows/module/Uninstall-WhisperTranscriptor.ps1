@@ -1,4 +1,4 @@
-# Uninstall-whisper-transcriptor.ps1
+﻿# Uninstall-whisper-transcriptor.ps1
 
 # Script de desinstalación de whisper-transcriptor
 # Elimina de manera limpia el módulo del sistema
@@ -16,6 +16,8 @@ function Remove-ModuleFromStandardPaths {
     $standardPaths = @(
         "$env:USERPROFILE\Documents\PowerShell\Modules\whisper-transcriptor",
         "$env:USERPROFILE\Documents\WindowsPowerShell\Modules\whisper-transcriptor",
+        "$env:USERPROFILE\Documents\PowerShell\Modules\WhisperTranslator",
+        "$env:USERPROFILE\Documents\WindowsPowerShell\Modules\WhisperTranslator",
         "C:\Program Files\PowerShell\Modules\whisper-transcriptor",
         "$env:ProgramFiles\PowerShell\Modules\whisper-transcriptor"
     )
@@ -36,8 +38,24 @@ function Remove-ModuleFromStandardPaths {
         }
     }
 
+    # También buscar el módulo instalado desde el código fuente
+    $currentScriptDir = Split-Path -Parent $PSCommandPath
+    $projectRoot = Split-Path -Parent (Split-Path -Parent $currentScriptDir)
+    $moduleSourcePath = Join-Path $projectRoot "src\windows\module"
+    if (Test-Path $moduleSourcePath) {
+        try {
+            Write-Host "  • Limpiando sesión de código fuente: $moduleSourcePath" -ForegroundColor Yellow
+            Write-Host "    (El módulo se carga desde código fuente, no está 'instalado')" -ForegroundColor DarkGray
+            $removed = $true
+        }
+        catch {
+            Write-Host "    ✗ Advertencia: $_" -ForegroundColor Yellow
+        }
+    }
+
     if (-not $removed) {
-        Write-Host "  • No se encontraron instalaciones del módulo" -ForegroundColor DarkGray
+        Write-Host "  • No se encontraron instalaciones formales del módulo" -ForegroundColor DarkGray
+        Write-Host "    (El módulo puede estar cargándose desde código fuente)" -ForegroundColor DarkGray
     }
 
     Write-Host ""
@@ -88,27 +106,48 @@ function Unload-Module {
 
 # Función para limpiar alias
 function Remove-ModuleAlias {
-    Write-Host "🔍 Buscando alias del módulo..." -ForegroundColor Cyan
+    Write-Host "🔍 Buscando alias y funciones del módulo..." -ForegroundColor Cyan
     Write-Host ""
 
-    $aliasesToRemove = @("wtranscriptor", "whisper-transcriptor")
+    $namesToRemove = @("wtranscriptor", "whisper-transcriptor")
     $removed = $false
 
-    foreach ($aliasName in $aliasesToRemove) {
+    foreach ($name in $namesToRemove) {
+        # buscar alias
         try {
-            if (Get-Alias -Name $aliasName -ErrorAction SilentlyContinue) {
-                Remove-Item -Path "Alias:\$aliasName" -Force
-                Write-Host "  ✓ Alias '$aliasName' eliminado" -ForegroundColor Green
+            $alias = Get-Alias -Name $name -ErrorAction SilentlyContinue
+            if ($alias) {
+                Remove-Item -Path "Alias:\$name" -Force -ErrorAction SilentlyContinue
+                Write-Host "  ✓ Alias '$name' eliminado" -ForegroundColor Green
                 $removed = $true
             }
         }
         catch {
-            # Silenciosamente continuar si falla
+            # Silenciosamente continuar
+        }
+
+        # buscar función
+        try {
+            $func = Get-Command -Name $name -ErrorAction SilentlyContinue
+            if ($func) {
+                # Si es un archivo de script, también limpiarlo
+                $funcPath = $func.Path
+                if ($funcPath -match "whisper-transcriptor") {
+                    Write-Host "  ✓ Función '$name' encontrada: $funcPath" -ForegroundColor Yellow
+                }
+                # Remover de memoria
+                Remove-Item -Path "Function:\$name" -Force -ErrorAction SilentlyContinue
+                Write-Host "  ✓ Función '$name' eliminada de memoria" -ForegroundColor Green
+                $removed = $true
+            }
+        }
+        catch {
+            # Silenciosamente continuar
         }
     }
 
     if (-not $removed) {
-        Write-Host "  • No se encontraron alias para eliminar" -ForegroundColor DarkGray
+        Write-Host "  • No se encontraron alias/funciones para eliminar" -ForegroundColor DarkGray
     }
 
     Write-Host ""
@@ -196,6 +235,54 @@ function Find-CmdFiles {
     }
 }
 
+# Función para forzar limpieza completa del comando de la sesión
+function Force-CleanCommand {
+    param([string]$CommandName = "wtranscriptor")
+    
+    Write-Host "🔧 Forzando limpieza de '$CommandName'..." -ForegroundColor Cyan
+    
+    # busqueda en todos los scopes de función
+    $cleaned = $false
+    
+    # 1. Remover de Function: scope actual
+    if (Test-Path "Function:\$CommandName") {
+        Remove-Item "Function:\$CommandName" -Force -ErrorAction SilentlyContinue
+        Write-Host "  ✓ Eliminada función del scope actual" -ForegroundColor Green
+        $cleaned = $true
+    }
+    
+    # 2. Remover alias
+    if (Test-Path "Alias:\$CommandName") {
+        Remove-Item "Alias:\$CommandName" -Force -ErrorAction SilentlyContinue
+        Write-Host "  ✓ Eliminado alias del scope actual" -ForegroundColor Green
+        $cleaned = $true
+    }
+    
+    # 3. Buscar en funciones globales
+    try {
+        $cmd = Get-Command $CommandName -ErrorAction SilentlyContinue
+        if ($cmd) {
+            $cmdType = $cmd.CommandType
+            Write-Host "  ℹ Comando encontrado: $cmdType" -ForegroundColor Yellow
+            
+            # Si es función o alias, limpiar el origen
+            if ($cmdType -eq "Function" -or $cmdType -eq "Alias") {
+                $origin = $cmd.Source
+                Write-Host "    Origen: $origin" -ForegroundColor DarkGray
+            }
+        }
+    }
+    catch {
+        # No encontramos el comando - está limpio
+    }
+    
+    if (-not $cleaned) {
+        Write-Host "  • No se encontró '$CommandName' en la sesión actual" -ForegroundColor DarkGray
+    }
+    
+    Write-Host ""
+}
+
 # Función principal de desinstalación
 function Uninstall-whisper-transcriptor {
     Write-Host ""
@@ -221,42 +308,55 @@ function Uninstall-whisper-transcriptor {
     Write-Host "Iniciando desinstalación..." -ForegroundColor Cyan
     Write-Host ""
 
-    # Ejecutar pasos de desinstalación
+# Ejecutar pasos de desinstalación
     Unload-Module
     $wasRemoved = Remove-ModuleFromStandardPaths
     Remove-ModuleAlias
+    Force-CleanCommand -CommandName "wtranscriptor"
     Clean-PowerShellProfile
     Clean-EnvironmentVariables
     Find-CmdFiles
 
-    if (-not $wasRemoved) {
+if (-not $wasRemoved) {
         Write-Host ""
-        Write-Host "⚠ No se encontró el módulo instalado en las ubicaciones estándar" -ForegroundColor Yellow
+        Write-Host "⚠ No se encontró el módulo instalado formalmente" -ForegroundColor Yellow
+        Write-Host "  El módulo parece estar cargado desde código fuente" -ForegroundColor DarkGray
         Write-Host ""
     }
 
+    # Forzar limpieza del alias aunque no haya módulo instalado
+    Write-Host "🔧 Limpiando alias 'wtranscriptor' de todas las sesiones..." -ForegroundColor Cyan
+    try {
+        # Intentar en múltiples scopes
+        $aliases = Get-Alias -Name "wtranscriptor" -ErrorAction SilentlyContinue
+        if ($aliases) {
+            Remove-Item -Path "Alias:\wtranscriptor" -Force -ErrorAction SilentlyContinue
+            Write-Host "  ✓ Alias 'wtranscriptor' eliminado" -ForegroundColor Green
+        }
+    }
+    catch {
+        Write-Host "  • No se encontró alias en sesión actual" -ForegroundColor DarkGray
+    }
     Write-Host ""
+
+Write-Host ""
     Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Green
     Write-Host "║                    DESINSTALACIÓN COMPLETADA                   ║" -ForegroundColor Green
     Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Green
     Write-Host ""
-    Write-Host "✨ El módulo whisper-transcriptor ha sido eliminado completamente" -ForegroundColor White
+    Write-Host "✨Limpieza completada" -ForegroundColor White
     Write-Host ""
-    Write-Host "📋 Limpieza realizada:" -ForegroundColor Cyan
-    Write-Host "  ✓ Módulo descargado de memoria" -ForegroundColor DarkGray
-    Write-Host "  ✓ Archivos del módulo eliminados" -ForegroundColor DarkGray
-    Write-Host "  ✓ Alias limpiados (wtranscriptor)" -ForegroundColor DarkGray
+    Write-Host "📋Resumen:" -ForegroundColor Cyan
+    Write-Host "  ✓ Módulo descargado de memoria (si estaba cargado)" -ForegroundColor DarkGray
+    Write-Host "  ✓ Alias/funciones limpiados" -ForegroundColor DarkGray
     Write-Host "  ✓ Caché de PowerShell limpiado" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "⚠️  IMPORTANTE:" -ForegroundColor Yellow
-    Write-Host "  • Cierra COMPLETAMENTE todas las ventanas de PowerShell" -ForegroundColor White
-    Write-Host "  • Abre una nueva ventana para confirmar la desinstalación" -ForegroundColor White
+    Write-Host "⚠️  IMPORTANTE - CIERRA COMPLETAMENTE PowerShell y ábrelo nuevo" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "🔍 Para verificar:" -ForegroundColor Cyan
-    Write-Host "  Get-Module -ListAvailable whisper-transcriptor" -ForegroundColor DarkGray
-    Write-Host ""
-    Write-Host "🔄 Para reinstalar:" -ForegroundColor Cyan
-    Write-Host "  .\src\windows\module\Install-WhisperTranslator.ps1" -ForegroundColor DarkGray
+    Write-Host "🔍 Para usar desde código fuente (en nueva sesión):" -ForegroundColor Cyan
+    Write-Host "  cd C:\Users\alexi\src\amillanaol\whisper-transcriptor" -ForegroundColor DarkGray
+    Write-Host "  Import-Module .\src\windows\module\whisper-transcriptor.psd1 -Force" -ForegroundColor DarkGray
+    Write-Host "  wtranscriptor videos-input\video.mp4 -m tiny" -ForegroundColor DarkGray
     Write-Host ""
 }
 
