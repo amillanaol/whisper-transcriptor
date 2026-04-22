@@ -584,9 +584,7 @@ function Invoke-VideoFiles {
             # Ejecutar Whisper con el directorio de salida
             $startTime = Get-Date
             $outputDir = if ($hasWriteAccess) { $targetDir } else { $script:AltOutputDirectory }
-            $outputDir = $outputDir.TrimEnd('\')
-            $quotedOutputDir = if ($outputDir -match '\s') { "`"$outputDir`"" } else { $outputDir }
-            & whisper "$($videoFile.FullName)" --fp16=False --language Spanish --model $Model --output_format srt --output_dir $quotedOutputDir --device $Device
+            & whisper "$($videoFile.FullName)" --fp16=False --language Spanish --model $Model --output_format srt --output_dir $outputDir --device $Device
             $whisperExitCode = $LASTEXITCODE
             $elapsedTime = ((Get-Date) - $startTime).TotalSeconds
 
