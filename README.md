@@ -1,9 +1,5 @@
 # Whisper Transcriptor
 
-Herramienta de transcripcion automatica de multimedia utilizando Whisper de OpenAI.
-
-## Descripcion
-
 Whisper Transcriptor es una solucion que automatiza la generacion de subtitulos SRT a partir de archivos multimedia utilizando la tecnologia Whisper de OpenAI. El modulo esta diseñado para procesar multiples archivos de audio y video de forma recursiva y generar automaticamente archivos de subtitulos.
 
 Implementado como un menu interactivo con interfaz TUI, el sistema sigue una arquitectura modular con separacion clara entre la logica de transcripcion, utilidades y scripts de instalacion.
