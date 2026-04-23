@@ -64,40 +64,7 @@ Menu Principal
 
 ## Flujo de Ejecucion
 
-```
-Usuario ejecuta wtranscriptor
-           │
-           ▼
-┌─────────────────────────┐
-│ Validar parametros     │
-└─────────────────────────┘
-           │
-           ▼
-┌─────────────────────────┐
-│ Buscar archivos video  │ ──► Get-ChildItem -Filter "*.mp4"
-└─────────────────────────┘
-           │
-           ▼
-┌─────────────────────────┐
-│ Verificar SRT existente│ ──► Test-SrtFileExists
-└─────────────────────────┘
-           │
-           ▼
-┌─────────────────────────┐
-│ Mostrar resumen TUI    │ ──► Show-ProcessingSummary
-└─────────────────────────┘
-           │
-           ▼
-┌─────────────────────────┐
-│ Procesar cada video    │ ──► Invoke-VideoFiles
-│   └─► whisper CLI      │ ──► & whisper ...
-└─────────────────────────┘
-           │
-           ▼
-┌─────────────────────────┐
-│ Generar archivo SRT    │
-└─────────────────────────┘
-```
+![[assets/Pasted image 20260422214121.png]]
 
 ## Estructura de Archivos
 
