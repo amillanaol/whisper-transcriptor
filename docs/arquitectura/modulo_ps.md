@@ -64,7 +64,11 @@ Menu Principal
 
 ## Flujo de Ejecucion
 
-![[docs/arquitectura/assets/Pasted image 20260422214121.png]]
+<div align="center">
+    <img src="https://raw.githubusercontent.com/amillanaol/whisper-transcriptor/refs/heads/main/docs/arquitectura/assets/Pasted%20image%2020260422214121.png"
+        alt="IGV "
+        width="700" />
+</div>
 
 ## Estructura de Archivos
 
