@@ -64,7 +64,7 @@ Menu Principal
 
 ## Flujo de Ejecucion
 
-![[assets/Pasted image 20260422214121.png]]
+![[docs/arquitectura/assets/Pasted image 20260422214121.png]]
 
 ## Estructura de Archivos
 
