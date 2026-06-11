@@ -51,11 +51,11 @@ function Show-ProgressBar {
     )
 
     if ($Total -eq 0) { $Total = 1 }
-    $percent = [math]::Min(100, [math]::Floor(($Current / $Total) * 100))
+    $percent = [math]::Max(0, [math]::Min(100, [math]::Floor(($Current / $Total) * 100)))
     $filled = [math]::Floor(($percent / 100) * $BarLength)
     $empty = $BarLength - $filled
 
-    $bar = "[" + ($FilledChar * $filled) + ($EmptyChar * $empty) + "]"
+    $bar = "[" + [System.String]::new($FilledChar, [math]::Max(0,$filled)) + [System.String]::new($EmptyChar, [math]::Max(0,$empty)) + "]"
     return "$bar $percent% ($Current/$Total)"
 }
 
@@ -85,7 +85,7 @@ function Show-FileProgressBar {
     $filled = [math]::Floor(($percent / 100) * $BarLength)
     $empty = $BarLength - $filled
 
-    $bar = "[" + ("█" * $filled) + ("░" * $empty) + "]"
+    $bar = "[" + [System.String]::new('█', [math]::Max(0,$filled)) + [System.String]::new('░', [math]::Max(0,$empty)) + "]"
     return "$bar $percent%"
 }
 
@@ -167,21 +167,17 @@ function Show-InfoBox {
         [int]$Width = 64
     )
 
-    $topBorder = "╔" + ("═" * ($Width - 2)) + "╗"
-    $midBorder = "╠" + ("═" * ($Width - 2)) + "╣"
-    $botBorder = "╚" + ("═" * ($Width - 2)) + "╝"
+    $topBorder = "╔" + [System.String]::new('═', $Width - 2) + "╗"
+    $midBorder = "╠" + [System.String]::new('═', $Width - 2) + "╣"
+    $botBorder = "╚" + [System.String]::new('═', $Width - 2) + "╝"
 
-    # Título
-    $titlePadding = " " * ($Width - 4 - $Title.Length)
     Write-Host $topBorder -ForegroundColor Cyan
-    Write-Host "║  $Title$titlePadding║" -ForegroundColor Cyan
+    Write-Host ("║  $Title".PadRight($Width - 1) + "║") -ForegroundColor Cyan
     Write-Host $midBorder -ForegroundColor Cyan
 
-    # Campos
     foreach ($key in $Fields.Keys) {
         $line = "$key`: $($Fields[$key])"
-        $linePadding = " " * ($Width - 6 - $line.Length)
-        Write-Host "║  $line$linePadding║" -ForegroundColor Cyan
+        Write-Host ("║  $line".PadRight($Width - 1) + "║") -ForegroundColor Cyan
     }
 
     Write-Host $botBorder -ForegroundColor Cyan
@@ -215,38 +211,33 @@ function Show-ProcessingBox {
     )
 
     $width = 64
-    $topBorder = "╔" + ("═" * ($width - 2)) + "╗"
-    $midBorder = "╠" + ("═" * ($width - 2)) + "╣"
-    $botBorder = "╚" + ("═" * ($width - 2)) + "╝"
+    $topBorder = "╔" + [System.String]::new('═', $width - 2) + "╗"
+    $midBorder = "╠" + [System.String]::new('═', $width - 2) + "╣"
+    $botBorder = "╚" + [System.String]::new('═', $width - 2) + "╝"
 
     Write-Host $topBorder
-    Write-Host "║  📋 ESTADO DEL PROCESO" + (" " * ($width - 23)) + "║"
+    Write-Host ("║  📋 ESTADO DEL PROCESO".PadRight($width - 1) + "║")
+
     Write-Host $midBorder
 
-    # Archivo
     $fileText = "📹 Archivo: $FileName"
     if ($fileText.Length -gt $width - 6) {
         $fileText = $fileText.Substring(0, $width - 9) + "..."
     }
-    $filePadding = " " * ($width - 4 - $fileText.Length)
-    Write-Host "║  $fileText$filePadding║"
+    Write-Host ("║  $fileText".PadRight($width - 1) + "║")
 
-    # Estado
     $statusText = "⏳ Estado: $Status"
     if ($statusText.Length -gt $width - 6) {
         $statusText = $statusText.Substring(0, $width - 9) + "..."
     }
-    $statusPadding = " " * ($width - 4 - $statusText.Length)
-    Write-Host "║  $statusText$statusPadding║"
+    Write-Host ("║  $statusText".PadRight($width - 1) + "║")
 
-    # Detalle
     if ($Detail) {
         $detailText = "📝 $Detail"
         if ($detailText.Length -gt $width - 6) {
             $detailText = $detailText.Substring(0, $width - 9) + "..."
         }
-        $detailPadding = " " * ($width - 4 - $detailText.Length)
-        Write-Host "║  $detailText$detailPadding║"
+        Write-Host ("║  $detailText".PadRight($width - 1) + "║")
     }
 
     Write-Host $botBorder
