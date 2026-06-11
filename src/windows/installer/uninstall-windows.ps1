@@ -28,7 +28,8 @@ function Write-Header {
     param([string]$Message)
     Write-Host "`n╔════════════════════════════════════════════════════════════════╗" -ForegroundColor $ColorHeader
     Write-Host "║  $Message" -ForegroundColor $ColorHeader -NoNewline
-    Write-Host "$(' ' * (62 - $Message.Length))║" -ForegroundColor $ColorHeader
+    $line = "║  $Message"
+    Write-Host ($line.PadRight(63) + "║") -ForegroundColor $ColorHeader
     Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor $ColorHeader
     Write-Host ""
 }
@@ -55,32 +56,37 @@ function Write-Info {
 
 # --- FUNCIÓN PARA BUSCAR Y ELIMINAR EL MÓDULO ---
 function Remove-ModuleFromAllPaths {
-    # Buscar tanto "whisper-transcriptor" como "WhisperTranslator"
     $ModuleNames = @("whisper-transcriptor", "WhisperTranslator")
-    $allPaths = @()
+    $foundLocations = @()
 
+    # Escanear todas las rutas en PSModulePath
+    $psModulePaths = $env:PSModulePath -split ';'
     foreach ($ModuleName in $ModuleNames) {
-        $allPaths += @(
+        foreach ($basePath in $psModulePaths) {
+            $moduleDir = Join-Path -Path $basePath -ChildPath $ModuleName
+            if (Test-Path -Path $moduleDir) {
+                $foundLocations += $moduleDir
+            }
+        }
+        # Adicional: buscar en rutas conocidas (por si no están en PSModulePath)
+        $extraPaths = @(
             "$env:USERPROFILE\Documents\PowerShell\Modules\$ModuleName",
             "$env:USERPROFILE\Documents\WindowsPowerShell\Modules\$ModuleName",
             "C:\Program Files\PowerShell\Modules\$ModuleName",
-            "$env:ProgramFiles\PowerShell\Modules\$ModuleName"
+            "$env:ProgramFiles\PowerShell\Modules\$ModuleName",
+            "$env:ProgramFiles\WindowsPowerShell\Modules\$ModuleName",
+            "$env:ALLUSERSPROFILE\PowerShell\Modules\$ModuleName",
+            "$env:ALLUSERSPROFILE\WindowsPowerShell\Modules\$ModuleName"
         )
-    }
-
-    $standardPaths = $allPaths
-
-    $removed = $false
-    $foundLocations = @()
-
-    foreach ($path in $standardPaths) {
-        if (Test-Path -Path $path) {
-            $foundLocations += $path
+        foreach ($path in $extraPaths) {
+            if ((Test-Path $path) -and ($foundLocations -notcontains $path)) {
+                $foundLocations += $path
+            }
         }
     }
 
     if ($foundLocations.Count -eq 0) {
-        Write-Warning "El módulo whisper-transcriptor/WhisperTranslator no está instalado en ninguna ubicación estándar"
+        Write-Warning "El módulo whisper-transcriptor/WhisperTranslator no está instalado en ninguna ubicación"
         return $false
     }
 
@@ -90,7 +96,7 @@ function Remove-ModuleFromAllPaths {
     }
     Write-Host ""
 
-    # Primero, remover los módulos de la sesión actual si están cargados
+    # Remover módulos de la sesión actual
     foreach ($ModuleName in $ModuleNames) {
         $loadedModule = Get-Module -Name $ModuleName
         if ($loadedModule) {
@@ -100,17 +106,35 @@ function Remove-ModuleFromAllPaths {
         }
     }
 
+    # Eliminar archivos de módulo de todas las ubicaciones
+    $removed = $false
     foreach ($path in $foundLocations) {
         try {
-            Write-Info "Eliminando módulo de: $path"
+            Write-Info "Eliminando: $path"
             Remove-Item -Path $path -Recurse -Force -ErrorAction Stop
-            Write-Success "Módulo eliminado correctamente de $path"
+            Write-Success "Eliminado"
             $removed = $true
         }
         catch {
-            Write-Error "Error al eliminar de $path : $_"
+            Write-Error "Error al eliminar $path : $_"
         }
     }
+
+    # Limpiar caché de análisis de módulos de PowerShell
+    $analysisCache = "$env:LOCALAPPDATA\Microsoft\Windows\PowerShell\ModuleAnalysisCache"
+    if (Test-Path $analysisCache) {
+        try {
+            Remove-Item -Path $analysisCache -Force -ErrorAction Stop
+            Write-Success "Caché de módulos limpiada"
+        } catch {
+            Write-Info "No se pudo limpiar la caché (no crítico)"
+        }
+    }
+
+    # Forzar recarga de módulos disponibles
+    try {
+        [System.Management.Automation.ModuleIntrinsics]::GetModuleCache().Clear()
+    } catch {}
 
     return $removed
 }
