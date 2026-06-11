@@ -139,6 +139,60 @@ if (Test-CommandExists "ffmpeg") {
     Write-Info "O usa winget: winget install Gyan.FFmpeg"
 }
 
+# --- PRE-LIMPIEZA: eliminar instalaciones previas ---
+Write-Header "Limpieza de Instalaciones Anteriores"
+
+$ModuleName = "whisper-transcriptor"
+$removedCount = 0
+
+# Escanear todas las rutas en PSModulePath + rutas conocidas
+$searchPaths = ($env:PSModulePath -split ';') + @(
+    "$env:USERPROFILE\Documents\PowerShell\Modules",
+    "$env:USERPROFILE\Documents\WindowsPowerShell\Modules",
+    "C:\Program Files\PowerShell\Modules",
+    "$env:ProgramFiles\PowerShell\Modules",
+    "$env:ProgramFiles\WindowsPowerShell\Modules",
+    "$env:ALLUSERSPROFILE\PowerShell\Modules",
+    "$env:ALLUSERSPROFILE\WindowsPowerShell\Modules"
+) | Select-Object -Unique
+
+$oldPaths = @()
+foreach ($base in $searchPaths) {
+    $dir = Join-Path $base $ModuleName
+    if (Test-Path $dir) { $oldPaths += $dir }
+}
+# También buscar WhisperTranslator (nombre antiguo)
+foreach ($base in $searchPaths) {
+    $dir = Join-Path $base "WhisperTranslator"
+    if (Test-Path $dir) { $oldPaths += $dir }
+}
+
+# Remover de la sesión actual
+Get-Module $ModuleName, WhisperTranslator -ErrorAction SilentlyContinue | Remove-Module -Force
+
+# Eliminar directorios
+foreach ($path in $oldPaths) {
+    Write-Info "Eliminando instalación anterior: $path"
+    try {
+        Remove-Item -Path $path -Recurse -Force -ErrorAction Stop
+        Write-Success "Eliminado"
+        $removedCount++
+    } catch {
+        Write-Warning "No se pudo eliminar $path : $_"
+    }
+}
+
+# Limpiar caché de análisis de módulos
+$cache = "$env:LOCALAPPDATA\Microsoft\Windows\PowerShell\ModuleAnalysisCache"
+if (Test-Path $cache) { try { Remove-Item $cache -Force } catch {} }
+try { [System.Management.Automation.ModuleIntrinsics]::GetModuleCache().Clear() } catch {}
+
+if ($removedCount -gt 0) {
+    Write-Success "Se eliminaron $removedCount instalaciones anteriores"
+} else {
+    Write-Info "No se encontraron instalaciones previas"
+}
+
 # --- INSTALACIÓN DEL MÓDULO ---
 Write-Header "Instalación del Módulo whisper-transcriptor"
 
@@ -147,7 +201,6 @@ $ScriptPath = $PSScriptRoot
 # El script está en src/windows/installer, subir un nivel para llegar a src/windows
 $WindowsPath = Split-Path -Path $ScriptPath -Parent
 $ModuleSourcePath = Join-Path -Path $WindowsPath -ChildPath "module"
-$ModuleName = "whisper-transcriptor"
 
 # Verificar que existen los archivos del módulo
 if (-not (Test-Path -Path $ModuleSourcePath)) {
@@ -164,70 +217,63 @@ if (-not (Test-Path -Path $ManifestFile)) {
 
 Write-Success "Archivos del módulo encontrados"
 
-# Determinar ruta de destino según versión de PowerShell
-if ($PSVersionTable.PSVersion.Major -ge 6) {
-    $UserModulesPath = Join-Path -Path $env:USERPROFILE -ChildPath "Documents\PowerShell\Modules"
-} else {
-    $UserModulesPath = Join-Path -Path $env:USERPROFILE -ChildPath "Documents\WindowsPowerShell\Modules"
-}
-$DestinationModulePath = Join-Path -Path $UserModulesPath -ChildPath $ModuleName
+# Instalar a TODAS las rutas de módulos de usuario para compatibilidad PS5 y PS7
+$ModulePaths = @(
+    "$env:USERPROFILE\Documents\WindowsPowerShell\Modules\$ModuleName"
+    "$env:USERPROFILE\Documents\PowerShell\Modules\$ModuleName"
+) | Select-Object -Unique
 
-# Verificar si ya existe una instalación previa
-if (Test-Path -Path $DestinationModulePath) {
-    if (-not $Force) {
-        Write-Warning "El módulo ya está instalado en: $DestinationModulePath"
-        $overwrite = Read-Host "¿Deseas sobrescribir la instalación existente? (S/N)"
-        if ($overwrite -ne 'S' -and $overwrite -ne 's') {
-            Write-Info "Instalación cancelada por el usuario"
-            exit 0
-        }
+$installedAt = @()
+foreach ($DestinationModulePath in $ModulePaths) {
+    # Crear directorio de destino
+    Write-Info "Instalando en: $DestinationModulePath"
+    New-Item -Path $DestinationModulePath -ItemType Directory -Force | Out-Null
+    
+    # Copiar archivos
+    try {
+        Copy-Item -Path "$ModuleSourcePath\*" -Destination $DestinationModulePath -Recurse -Force
+        $installedAt += $DestinationModulePath
+        Write-Success "Instalado"
+    } catch {
+        Write-Warning "No se pudo instalar en $DestinationModulePath : $_"
     }
-    Write-Info "Eliminando instalación anterior..."
-    Remove-Item -Path $DestinationModulePath -Recurse -Force
 }
 
-# Crear directorio de destino
-Write-Info "Creando directorio de destino..."
-New-Item -Path $DestinationModulePath -ItemType Directory -Force | Out-Null
-Write-Success "Directorio creado: $DestinationModulePath"
-
-# Copiar archivos
-Write-Info "Copiando archivos del módulo..."
-try {
-    Copy-Item -Path "$ModuleSourcePath\*" -Destination $DestinationModulePath -Recurse -Force
-    Write-Success "Archivos copiados correctamente"
-} catch {
-    Write-Error "Error al copiar archivos: $_"
-    exit 1
+# Actualizar GUID en TODAS las copias
+$NewGuid = [guid]::NewGuid().Guid
+foreach ($path in $installedAt) {
+    $manifestFile = Join-Path -Path $path -ChildPath "whisper-transcriptor.psd1"
+    if (Test-Path $manifestFile) {
+        $content = Get-Content -Path $manifestFile -Raw
+        $content = $content -replace "GUID\s*=\s*['`"]([^'`"]+)['`"]", "GUID = '$NewGuid'"
+        Set-Content -Path $manifestFile -Value $content -Force
+    }
 }
-
-# Actualizar GUID si es necesario
-$DestinationManifestFile = Join-Path -Path $DestinationModulePath -ChildPath "whisper-transcriptor.psd1"
-$ManifestContent = Get-Content -Path $DestinationManifestFile -Raw
-
-if ($ManifestContent -match "GUID\s*=\s*['`"]a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6['`"]") {
-    Write-Info "Generando nuevo GUID para el módulo..."
-    $NewGuid = [guid]::NewGuid().Guid
-    $NewManifestContent = $ManifestContent -replace "GUID\s*=\s*['`"]([^'`"]+)['`"]", "GUID = '$NewGuid'"
-    Set-Content -Path $DestinationManifestFile -Value $NewManifestContent -Force
-    Write-Success "GUID actualizado: $NewGuid"
-}
+Write-Success "GUID unificado: $NewGuid"
 
 # --- VERIFICACIÓN DE LA INSTALACIÓN ---
 Write-Header "Verificación de la Instalación"
 
 Write-Info "Importando el módulo para verificar..."
-try {
-    Import-Module -Name $DestinationModulePath -Force -ErrorAction Stop
-    Write-Success "Módulo importado correctamente"
-    
-    # Verificar función exportada
+$imported = $false
+foreach ($path in $installedAt) {
+    try {
+        Import-Module -Name $path -Force -ErrorAction Stop
+        Write-Success "Módulo importado desde: $path"
+        $imported = $true
+        break
+    } catch {
+        Write-Warning "No se pudo importar desde $path"
+    }
+}
+
+if ($imported) {
     $command = Get-Command Invoke-whisper-transcriptor -ErrorAction SilentlyContinue
     if ($command) {
         Write-Success "Comando 'Invoke-whisper-transcriptor' disponible"
     }
-} catch {
-    Write-Error "Error al importar el módulo: $_"
+} else {
+    Write-Error "Error al importar el módulo desde cualquier ubicación"
     exit 1
 }
 
@@ -257,7 +303,8 @@ Write-Host @"
 
 El módulo whisper-transcriptor ha sido instalado exitosamente.
 
-📁 Ubicación del módulo: $DestinationModulePath
+📁 Ubicaciones del módulo:
+      $($installedAt -join "`n      ")
 📂 Directorio de trabajo: $WorkingDirectory
 📥 Directorio de inputs: $InputsDirectory
 
@@ -280,7 +327,7 @@ El módulo whisper-transcriptor ha sido instalado exitosamente.
    Invoke-whisper-transcriptor [-Directory <path>] [-Model <modelo>] [-Extension <ext>]
    
    Modelos disponibles: tiny, base, small, medium, turbo
-   Extensiones soportadas: mp4, mkv, webm, avi, mov
+   Extensiones soportadas: mp4, mkv, webm, avi, mov, m4a
 
    Alias: wtranscriptor
 
