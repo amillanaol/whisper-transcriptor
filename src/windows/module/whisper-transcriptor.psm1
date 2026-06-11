@@ -2,6 +2,26 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
+# TRAP GLOBAL: captura cualquier error de multiplicación de strings y lo registra
+trap [System.Management.Automation.RuntimeException] {
+    if ($_.Exception.Message -match "times") {
+        $logFile = "$env:TEMP\wt_trace.log"
+        "=== TIMES ERROR at $(Get-Date -Format 'HH:mm:ss.fff') ===" | Out-File $logFile -Append
+        "Message: $($_.Exception.Message)" | Out-File $logFile -Append
+        "StackTrace: $($_.ScriptStackTrace)" | Out-File $logFile -Append
+        "PSCommandPath: $($_.InvocationInfo.PSCommandPath)" | Out-File $logFile -Append
+        "Line: $($_.InvocationInfo.Line)" | Out-File $logFile -Append
+        "LineNumber: $($_.InvocationInfo.ScriptLineNumber)" | Out-File $logFile -Append
+        "FunctionName: $($_.InvocationInfo.MyCommand.Name)" | Out-File $logFile -Append
+        "=== END ===" | Out-File $logFile -Append
+    }
+    continue
+}
+
+function Clear-SafeHost {
+    try { Clear-Host } catch {} 
+}
+
 # Variable para almacenar la versión del módulo
 $script:Version = "1.2.3"
 
@@ -93,7 +113,7 @@ function Show-ProcessingSummary {
     )
 
     # Limpiar la consola para una mejor experiencia visual
-    Clear-Host
+    Clear-SafeHost
 
     # Obtener archivos de video (sin recurse para evitar subcarpetas)
     $videoFiles = Get-ChildItem -Path $Directory -Filter "*.$Extension" -ErrorAction SilentlyContinue
@@ -262,7 +282,7 @@ function Show-ProcessingSummary {
     Write-Host "  Escribe la ruta (o ENTER para usar el directorio por defecto): " -NoNewline -ForegroundColor Yellow
     $outputDirInput = Read-Host
 
-    if ($outputDirInput.Trim() -ne '') {
+    if ($outputDirInput -and $outputDirInput.Trim() -ne '') {
         $script:CustomOutputDirectory = $outputDirInput.Trim()
     } else {
         $script:CustomOutputDirectory = $null
@@ -278,7 +298,7 @@ function Show-ProcessingSummary {
 
     if ($confirmation -eq '' -or $confirmation -eq 'S' -or $confirmation -eq 's' -or $confirmation -eq 'Y' -or $confirmation -eq 'y') {
         # Limpiar consola antes de comenzar el procesamiento
-        Clear-Host
+        Clear-SafeHost
         Write-Host ""
         Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Green
         Write-Host "║                  INICIANDO PROCESAMIENTO...                    ║" -ForegroundColor Green
@@ -310,7 +330,7 @@ function Invoke-whisper-transcriptor {
 
         [Parameter(Mandatory=$false,Position=2)]
         [Alias("e")]
-        [ValidateSet("mp4", "mkv", "webm", "avi", "mov")]
+        [ValidateSet("mp4", "mkv", "webm", "avi", "mov", "m4a")]
         [string]$Extension = "mp4",
 
         [Parameter(Mandatory=$false)]
@@ -331,7 +351,7 @@ function Invoke-whisper-transcriptor {
     )
 
     # Limpiar la consola al inicio para mejor experiencia visual
-    Clear-Host
+    Clear-SafeHost
 
     if ($Version) {
         Write-Host "whisper-transcriptor versión $script:Version"
@@ -351,7 +371,7 @@ function Invoke-whisper-transcriptor {
         Write-Host "                     Valores permitidos: base, tiny, small, medium, turbo"
         Write-Host "                     (por defecto: tiny)"
         Write-Host "    -Extension, -e   Extensión de los archivos a procesar"
-        Write-Host "                     Valores permitidos: mp4, mkv, webm"
+        Write-Host "                     Valores permitidos: mp4, mkv, webm, avi, mov, m4a"
         Write-Host "                     (por defecto: mp4)"
         Write-Host "    -Device, -dev    Dispositivo de procesamiento"
         Write-Host "                     Valores permitidos: cpu, cuda"
@@ -423,11 +443,12 @@ function Show-ProgressBar {
         [int]$BarWidth = 40
     )
     
-    $percent = [math]::Floor(($Current / $Total) * 100)
-    $filled = [math]::Floor(($Current / $Total) * $BarWidth)
+    if ($Total -eq 0) { $Total = 1 }
+    $percent = [math]::Max(0, [math]::Min(100, [math]::Floor(($Current / $Total) * 100)))
+    $filled = [math]::Max(0, [math]::Min($BarWidth, [math]::Floor(($percent / 100) * $BarWidth)))
     $empty = $BarWidth - $filled
     
-    $bar = "█" * $filled + "░" * $empty
+    $bar = [System.String]::new('█', $filled) + [System.String]::new('░', $empty)
     
     return "[$bar] $percent% ($Current/$Total)"
 }
@@ -438,12 +459,13 @@ function Show-FileProgressBar {
         [int]$BarWidth = 40
     )
     
-    $filled = [math]::Floor(($Percent / 100) * $BarWidth)
+    $percent = [math]::Max(0, [math]::Min(100, $Percent))
+    $filled = [math]::Max(0, [math]::Min($BarWidth, [math]::Floor(($percent / 100) * $BarWidth)))
     $empty = $BarWidth - $filled
     
-    $bar = "█" * $filled + "░" * $empty
+    $bar = [System.String]::new('█', $filled) + [System.String]::new('░', $empty)
     
-    return "[$bar] $Percent%"
+    return "[$bar] $percent%"
 }
 
 function Show-SpinnerFrame {
@@ -461,34 +483,74 @@ function Show-ProcessingBox {
         [string]$Detail
     )
     
-    Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Cyan
-    Write-Host "║  📋 ESTADO DEL PROCESO                                         ║" -ForegroundColor Cyan
-    Write-Host "╠════════════════════════════════════════════════════════════════╣" -ForegroundColor Cyan
+    $logFile = "$env:TEMP\wt_debug.log"
+    Add-Content $logFile "=== SPB Enter FN=[$FileName] ST=[$Status] DT=[$Detail] ==="
+    
+    $TW = 64
+    $border = '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=', '=','='
+    
+    Add-Content $logFile "border count=$($border.Count)"
+    
+    $hline = "╔" + ($border -join '') + "╗"
+    Add-Content $logFile "hline len=$($hline.Length)"
+    Write-Host $hline -ForegroundColor Cyan
+    
+    Write-Host ("║  📋 ESTADO DEL PROCESO [v$script:Version-FX]".PadRight(63) + "║") -ForegroundColor Cyan
+    
+    $mline = "╠" + ($border -join '') + "╣"
+    Add-Content $logFile "mline len=$($mline.Length)"
+    Write-Host $mline -ForegroundColor Cyan
     
     # Línea 1: Archivo
-    $line1 = "║  📹 Archivo: $FileName"
-    $padding1 = " " * (63 - $line1.Length)
-    if ($line1.Length -gt 63) {
-        $line1 = $line1.Substring(0, 60) + "..."
-        $padding1 = ""
+    $l1 = "║  📹 Archivo: $FileName"
+    Add-Content $logFile "l1 raw len=$($l1.Length)"
+    if ($l1.Length -gt ($TW - 2)) { 
+        $l1 = $l1.Substring(0, $TW - 5) + "..."
+        Add-Content $logFile "l1 truncated to=$($l1.Length)"
     }
-    Write-Host "$line1$padding1║" -ForegroundColor White
+    $l1pad = "║" + $l1.Substring(1)
+    Add-Content $logFile "l1pad len=$($l1pad.Length) try PadRight($($TW-1))"
+    try {
+        $padded = $l1pad.PadRight($TW - 1)
+        Add-Content $logFile "PadRight OK len=$($padded.Length)"
+        Write-Host ($padded + "║") -ForegroundColor White
+    } catch {
+        Add-Content $logFile "PADRIGHT ERROR: $($_.Exception.GetType().Name): $($_.Exception.Message) param=$($_.Exception.ParamName)"
+        Write-Host "║  ERROR PadRight: $($_.Exception.Message)║" -ForegroundColor Red
+    }
     
     # Línea 2: Estado
-    $line2 = "║  ⏳ Estado: $Status"
-    $padding2 = " " * (63 - $line2.Length)
-    Write-Host "$line2$padding2║" -ForegroundColor Yellow
+    $l2 = "║  ⏳ Estado: $Status"
+    Add-Content $logFile "l2 raw len=$($l2.Length)"
+    if ($l2.Length -gt ($TW - 2)) { 
+        $l2 = $l2.Substring(0, $TW - 5) + "..."
+    }
+    $l2pad = "║" + $l2.Substring(1)
+    try {
+        $padded = $l2pad.PadRight($TW - 1)
+        Write-Host ($padded + "║") -ForegroundColor Yellow
+    } catch {
+        Add-Content $logFile "ERROR l2: $($_.Exception.Message)"
+        Write-Host "║  ERROR: $($_.Exception.Message)║" -ForegroundColor Red
+    }
     
     # Línea 3: Detalle
-    $line3 = "║  📝 $Detail"
-    $padding3 = " " * (63 - $line3.Length)
-    if ($line3.Length -gt 63) {
-        $line3 = $line3.Substring(0, 60) + "..."
-        $padding3 = ""
+    $l3 = "║  📝 $Detail"
+    Add-Content $logFile "l3 raw len=$($l3.Length)"
+    if ($l3.Length -gt ($TW - 2)) { 
+        $l3 = $l3.Substring(0, $TW - 5) + "..."
     }
-    Write-Host "$line3$padding3║" -ForegroundColor Cyan
+    $l3pad = "║" + $l3.Substring(1)
+    try {
+        $padded = $l3pad.PadRight($TW - 1)
+        Write-Host ($padded + "║") -ForegroundColor Cyan
+    } catch {
+        Add-Content $logFile "ERROR l3: $($_.Exception.Message)"
+        Write-Host "║  ERROR: $($_.Exception.Message)║" -ForegroundColor Red
+    }
     
-    Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Cyan
+    $bline = "╚" + ($border -join '') + "╝"
+    Write-Host $bline -ForegroundColor Cyan
 }
 
 function Invoke-VideoFiles {
@@ -529,7 +591,7 @@ function Invoke-VideoFiles {
             $processedCount++
 
             # Limpiar consola antes de cada procesamiento
-            Clear-Host
+            Clear-SafeHost
 
             # Obtener duración del video
             $duration = Get-VideoDuration -VideoPath $videoFile.FullName
@@ -633,7 +695,7 @@ function Invoke-VideoFiles {
             Write-Host "  ✓ Completado en $([math]::Floor($elapsedTime)) segundos" -ForegroundColor Green
 
             # Limpiar y mostrar completado
-            Clear-Host
+            Clear-SafeHost
             Write-Host ""
             Write-Host "  🎯 PROGRESO GENERAL" -ForegroundColor Green
             Write-Host "  $(Show-ProgressBar -Current $processedCount -Total $totalToProcess)" -ForegroundColor Cyan
