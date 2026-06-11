@@ -56,6 +56,7 @@ function Show-Menu {
     Write-Host "  [4] ▶️  Usar whisper-transcriptor (ejecutar módulo)" -ForegroundColor $ColorInfo
     Write-Host "  [5] 📖 Ver documentación" -ForegroundColor $ColorInfo
     Write-Host "  [6] 🗑️  Desinstalar whisper-transcriptor" -ForegroundColor $ColorInfo
+    Write-Host "  [7] 🔄 Reinstalar whisper-transcriptor" -ForegroundColor $ColorInfo
     Write-Host ""
     Write-Host "  [0] 🚪 Salir" -ForegroundColor $ColorWarning
     Write-Host ""
@@ -65,7 +66,7 @@ function Show-Menu {
 function Read-Option {
     param([string]$Prompt = "Selecciona una opción")
     Write-Host ""
-    $selection = Read-Host "  $Prompt (0-6)"
+    $selection = Read-Host "  $Prompt (0-7)"
     return $selection
 }
 
@@ -343,7 +344,7 @@ function Invoke-RunModule {
             $model = Read-Host "  Modelo (Enter para tiny)"
             if ([string]::IsNullOrWhiteSpace($model)) { $model = "tiny" }
 
-            Write-Host "  Extensiones: mp4, mkv, webm, avi, mov" -ForegroundColor $ColorInfo
+            Write-Host "  Extensiones: mp4, mkv, webm, avi, mov, m4a" -ForegroundColor $ColorInfo
             $ext = Read-Host "  Extensión (Enter para mp4)"
             if ([string]::IsNullOrWhiteSpace($ext)) { $ext = "mp4" }
 
@@ -461,6 +462,45 @@ function Invoke-Uninstall {
     Pause-Screen
 }
 
+function Invoke-Reinstall {
+    Show-Header
+    Write-Host "  🔄 REINSTALACIÓN" -ForegroundColor $ColorHeader
+    Write-Host ""
+
+    Write-Host "  ⚠️  Esta acción desinstalará y volverá a instalar el módulo." -ForegroundColor $ColorWarning
+    Write-Host ""
+
+    $confirm = Read-Host "  ¿Confirmas la reinstalación? (S/N)"
+
+    if ($confirm -ne 'S' -and $confirm -ne 's') {
+        Write-Info "Reinstalación cancelada"
+        Pause-Screen
+        return
+    }
+
+    $uninstallScript = Join-Path -Path $InstallerPath -ChildPath "uninstall-windows.ps1"
+    $installScript = Join-Path -Path $InstallerPath -ChildPath "install-windows.ps1"
+
+    if (-not (Test-Path $uninstallScript)) {
+        Write-Error "No se encontró el script de desinstalación"
+        Pause-Screen
+        return
+    }
+    if (-not (Test-Path $installScript)) {
+        Write-Error "No se encontró el script de instalación"
+        Pause-Screen
+        return
+    }
+
+    Show-Progress "Desinstalando versión actual"
+    & $uninstallScript -Force
+    Write-Host ""
+
+    Show-Progress "Instalando nueva versión"
+    & $installScript -Force -SkipPythonCheck -SkipWhisperCheck
+    Pause-Screen
+}
+
 # --- BUCLE PRINCIPAL ---
 $running = $true
 
@@ -477,6 +517,7 @@ while ($running) {
         '4' { Invoke-RunModule }
         '5' { Show-Documentation }
         '6' { Invoke-Uninstall }
+        '7' { Invoke-Reinstall }
         '0' {
             $running = $false
             Show-Header
