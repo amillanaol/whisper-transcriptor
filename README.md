@@ -18,6 +18,7 @@ Implementado como un menu interactivo con interfaz TUI, el sistema sigue una arq
 | Patrones TUI avanzados                       | [docs/desarrollo/tui_patrones.md](docs/desarrollo/tui_patrones.md)           |
 | Guia Linux (WSL/Ubuntu)                      | [docs/linux/instalacion_guia.md](docs/linux/instalacion_guia.md)             |
 | Pipeline CI/CD                               | [docs/pipeline/ci_github.md](docs/pipeline/ci_github.md)                     |
+| Procesar por lotes (batch processing)         | [#procesamiento-por-lotes](README.md#procesamiento-por-lotes)               |
 | Ejecutar tests                               | [docs/desarrollo/tests_ejecucion.md](docs/desarrollo/tests_ejecucion.md)     |
 | Resolucion de errores comunes                | [docs/errores/general_resolucion.md](docs/errores/general_resolucion.md)     |
 
@@ -101,7 +102,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process
 # 2. Ejecutar menu interactivo (recomendado)
 powershell -ExecutionPolicy Bypass -File menu.ps1
 
-# 3. O usar make (si esta disponible)
+# 3. O usar make (instalar con: scoop install make, winget install ezwinports.make, o choco install make)
 make install
 
 # 4. O ejecutar directamente el modulo ya instalado
@@ -109,6 +110,40 @@ wtranscriptor -d ./videos -m medium -e mp4
 ```
 
 Despues de instalado, usa el comando `wtranscriptor` o `Invoke-whisper-transcriptor` desde cualquier ubicacion.
+
+## Procesamiento por Lotes
+
+El modulo procesa **todos los archivos** de video que coincidan con la extension en el directorio especificado, recorriendo subdirectorios automaticamente (`-Recurse`). Cada archivo se procesa secuencialmente mostrando progreso en tiempo real.
+
+### Ejemplos de uso
+
+```bash
+# Procesar todos los .mp4 del directorio actual
+wtranscriptor
+
+# Procesar todos los .mp4 de una carpeta especifica
+wtranscriptor -d C:\videos\clases
+
+# Procesar multiples extensiones (mkv, avi, etc.)
+wtranscriptor -d ./videos -e mkv -m medium
+
+# Procesar con salida centralizada (todos los SRT en una sola carpeta)
+wtranscriptor -d ./videos -o "C:\subtitulos"
+
+# Procesar con GPU (CUDA)
+wtranscriptor -d ./videos -m turbo -dev cuda
+```
+
+### Comportamiento
+
+| Aspecto | Detalle |
+| :------ | :------ |
+| **Archivos a procesar** | Todos los `*.$Extension` en el directorio y subdirectorios |
+| **Orden** | Secuencial, uno tras otro |
+| **Omision** | Archivos que ya tienen un `.srt` junto al video se omiten automaticamente |
+| **Progreso** | Barra de progreso general + estado individual por archivo |
+| **Tiempo estimado** | Se calcula segun duracion del video y modelo seleccionado |
+| **Directorios de salida** | Por defecto: junto al video. Opcional: `-o <ruta>` para centralizar |
 
 ## Ejecucion de Tests
 
