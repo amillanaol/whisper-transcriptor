@@ -114,7 +114,7 @@ Guia de solucion de errores comunes en whisper-transcriptor.
 | :--- | :--- |
 | Sintoma | "make: command not found" |
 | Causa Raiz | make no instalado en Windows |
-| Solucion Tecnica | `scoop install make` o ejecutar directamente `.\menu.ps1` |
+| Solucion Tecnica | `scoop install make`, `winget install ezwinports.make` o `choco install make`. Como alternativa, ejecutar directamente `.\menu.ps1` |
 
 ### Error: Python abre Microsoft Store
 

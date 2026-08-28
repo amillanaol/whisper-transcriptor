@@ -165,7 +165,7 @@ La instalación estándar de `openai-whisper` incluye PyTorch sin soporte CUDA. 
 | "GUID de ejemplo detectado" | Manifiesto con GUID placeholder | El instalador genera automáticamente un nuevo GUID |
 | Caracteres corruptos en pantalla (`ðŸ'‹`, `â•'`) | Archivos `.ps1`/`.psm1` sin BOM en PowerShell 5.1 | Los archivos deben estar guardados como UTF-8 con BOM (`EF BB BF`) |
 | `Invoke-whisper-transcriptor` no reconocido tras instalar | Módulo instalado en ruta de PS7 pero se usa PS5.1 | Mover `Documents\PowerShell\Modules\whisper-transcriptor` a `Documents\WindowsPowerShell\Modules\` |
-| `make: command not found` | `make` no viene incluido en Windows | `scoop install make` (requiere Scoop: https://scoop.sh) o `scoop install avr-gcc` |
+| `make: command not found` | `make` no viene incluido en Windows | `scoop install make` (requiere Scoop), `winget install ezwinports.make` o `choco install make` |
 | `python` abre el Microsoft Store | Alias de Python del Store activo | Desactivar en Configuración → Aplicaciones → Alias de ejecución de aplicaciones, luego instalar: `choco install python313` |
 | `ModuleNotFoundError: No module named 'torch'` | PyTorch instalado sin soporte CUDA | `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124` |
 
@@ -217,7 +217,7 @@ El archivo `menu.ps1` proporciona una interfaz de línea de comandos con las sig
 | FFmpeg | `winget install Gyan.FFmpeg` | Procesamiento de audio/video |
 | openai-whisper | `pip install openai-whisper` | Motor de transcripción (CPU) |
 | PyTorch + CUDA | `pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124` | Motor de transcripción (GPU NVIDIA) |
-| make | `scoop install make` | Herramienta de build (requerida por Makefile) |
+| make | `scoop install make`, `winget install ezwinports.make` o `choco install make` | Herramienta de build (requerida por Makefile) |
 
 ## Flujo de Procesamiento
 
