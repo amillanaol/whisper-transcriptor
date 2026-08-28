@@ -23,7 +23,29 @@ function Clear-SafeHost {
 }
 
 # Variable para almacenar la versión del módulo
-$script:Version = "1.2.3"
+$script:Version = "1.2.4"
+
+function Test-WhisperAvailable {
+    $cmd = Get-Command whisper -ErrorAction SilentlyContinue
+    if ($cmd) { return $true }
+    try { $null = python -m whisper --help 2>&1; return $true } catch { return $false }
+}
+
+function Test-FFprobeAvailable {
+    return [bool](Get-Command ffprobe -ErrorAction SilentlyContinue)
+}
+
+function Test-PythonAvailable {
+    return [bool](Get-Command python -ErrorAction SilentlyContinue)
+}
+
+function Assert-Dependencies {
+    $missing = @()
+    if (-not (Test-PythonAvailable)) { $missing += "Python (python)" }
+    if (-not (Test-FFprobeAvailable)) { $missing += "FFmpeg (ffprobe)" }
+    if (-not (Test-WhisperAvailable)) { $missing += "Whisper (whisper)" }
+    return $missing
+}
 
 function Test-CudaAvailable {
     try {
@@ -116,7 +138,7 @@ function Show-ProcessingSummary {
     Clear-SafeHost
 
     # Obtener archivos de video (sin recurse para evitar subcarpetas)
-    $videoFiles = Get-ChildItem -Path $Directory -Filter "*.$Extension" -ErrorAction SilentlyContinue
+    $videoFiles = Get-ChildItem -Path $Directory -Recurse -Filter "*.$Extension" -ErrorAction SilentlyContinue
 
     if ($videoFiles.Count -eq 0) {
         Write-Host ""
@@ -386,6 +408,32 @@ function Invoke-whisper-transcriptor {
         return
     }
 
+    $missingDeps = Assert-Dependencies
+    if ($missingDeps.Count -gt 0) {
+        Write-Host ""
+        Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Red
+        Write-Host "║               DEPENDENCIAS FALTANTES                            ║" -ForegroundColor Red
+        Write-Host "╚════════════════════════════════════════════════════════════════╝" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "  Faltan las siguientes dependencias:" -ForegroundColor Yellow
+        foreach ($dep in $missingDeps) {
+            Write-Host "    ✗ $dep" -ForegroundColor Red
+        }
+        Write-Host ""
+        Write-Host "  Solución:" -ForegroundColor Cyan
+        if ($missingDeps -contains "Python (python)") {
+            Write-Host "    python: https://www.python.org/downloads/" -ForegroundColor White
+        }
+        if ($missingDeps -contains "FFmpeg (ffprobe)") {
+            Write-Host "    ffmpeg: winget install Gyan.FFmpeg" -ForegroundColor White
+        }
+        if ($missingDeps -contains "Whisper (whisper)") {
+            Write-Host "    whisper: python -m pip install openai-whisper" -ForegroundColor White
+        }
+        Write-Host ""
+        return 1
+    }
+
     if (-not (Test-Path -Path $Directory)) {
         Write-Host ""
         Write-Host "╔════════════════════════════════════════════════════════════════╗" -ForegroundColor Red
@@ -568,6 +616,9 @@ function Invoke-VideoFiles {
     $failedCount = 0
     $totalToProcess = 0
 
+    # Resolver comando whisper (directo o fallback a python -m whisper)
+    $whisperCmd = if (Get-Command whisper -ErrorAction SilentlyContinue) { "whisper" } else { "python", "-m", "whisper" }
+
     # Contar archivos a procesar
     foreach ($videoFile in $videoFiles) {
         if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
@@ -646,7 +697,7 @@ function Invoke-VideoFiles {
             # Ejecutar Whisper con el directorio de salida
             $startTime = Get-Date
             $outputDir = if ($hasWriteAccess) { $targetDir } else { $script:AltOutputDirectory }
-            & whisper "$($videoFile.FullName)" --fp16=False --language Spanish --model $Model --output_format srt --output_dir $outputDir --device $Device
+            & $whisperCmd "$($videoFile.FullName)" --fp16=False --language Spanish --model $Model --output_format srt --output_dir $outputDir --device $Device
             $whisperExitCode = $LASTEXITCODE
             $elapsedTime = ((Get-Date) - $startTime).TotalSeconds
 
