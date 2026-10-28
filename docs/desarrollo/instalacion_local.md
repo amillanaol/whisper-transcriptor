@@ -96,7 +96,7 @@ Invoke-whisper-transcriptor -Directory "C:\videos" -Model "tiny" -Extension "mp4
 | :--- | :--- | :--- | :--- |
 | `-Directory` | `-d` | Directorio actual | Ruta a archivos de video |
 | `-Model` | `-m` | tiny | Modelo Whisper (tiny/base/small/medium/turbo) |
-| `-Extension` | `-e` | mp4 | Extension de archivos (mp4/mkv/webm) |
+| `-Extension` | `-e` | mp4 | Extension de archivos (mp4/mkv/webm/avi/mov/m4a/ogg) |
 | `-Device` | `-dev` | cpu | Dispositivo (cpu/cuda) |
 
 ## Modelos Disponibles

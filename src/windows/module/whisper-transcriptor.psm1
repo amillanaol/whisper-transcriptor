@@ -352,7 +352,7 @@ function Invoke-whisper-transcriptor {
 
         [Parameter(Mandatory=$false,Position=2)]
         [Alias("e")]
-        [ValidateSet("mp4", "mkv", "webm", "avi", "mov", "m4a")]
+        [ValidateSet("mp4", "mkv", "webm", "avi", "mov", "m4a", "ogg")]
         [string]$Extension = "mp4",
 
         [Parameter(Mandatory=$false)]
@@ -393,7 +393,7 @@ function Invoke-whisper-transcriptor {
         Write-Host "                     Valores permitidos: base, tiny, small, medium, turbo"
         Write-Host "                     (por defecto: tiny)"
         Write-Host "    -Extension, -e   Extensión de los archivos a procesar"
-        Write-Host "                     Valores permitidos: mp4, mkv, webm, avi, mov, m4a"
+        Write-Host "                     Valores permitidos: mp4, mkv, webm, avi, mov, m4a, ogg"
         Write-Host "                     (por defecto: mp4)"
         Write-Host "    -Device, -dev    Dispositivo de procesamiento"
         Write-Host "                     Valores permitidos: cpu, cuda"

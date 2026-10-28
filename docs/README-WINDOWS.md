@@ -82,7 +82,7 @@ whisper-transcriptor/
 | :--- | :--- | :--- | :--- |
 | `-Directory` | `-d` | directorio actual | Cualquier ruta accesible |
 | `-Model` | `-m` | `tiny` | `tiny`, `base`, `small`, `medium`, `turbo` |
-| `-Extension` | `-e` | `mp4` | `mp4`, `mkv`, `webm` |
+| `-Extension` | `-e` | `mp4` | `mp4`, `mkv`, `webm`, `avi`, `mov`, `m4a`, `ogg` |
 | `-Device` | `-dev` | `cpu` | `cpu`, `cuda` |
 
 ### Alias Disponibles

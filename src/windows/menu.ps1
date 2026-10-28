@@ -344,7 +344,7 @@ function Invoke-RunModule {
             $model = Read-Host "  Modelo (Enter para tiny)"
             if ([string]::IsNullOrWhiteSpace($model)) { $model = "tiny" }
 
-            Write-Host "  Extensiones: mp4, mkv, webm, avi, mov, m4a" -ForegroundColor $ColorInfo
+            Write-Host "  Extensiones: mp4, mkv, webm, avi, mov, m4a, ogg" -ForegroundColor $ColorInfo
             $ext = Read-Host "  Extensión (Enter para mp4)"
             if ([string]::IsNullOrWhiteSpace($ext)) { $ext = "mp4" }
 

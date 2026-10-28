@@ -327,7 +327,7 @@ El módulo whisper-transcriptor ha sido instalado exitosamente.
    Invoke-whisper-transcriptor [-Directory <path>] [-Model <modelo>] [-Extension <ext>]
    
    Modelos disponibles: tiny, base, small, medium, turbo
-   Extensiones soportadas: mp4, mkv, webm, avi, mov, m4a
+   Extensiones soportadas: mp4, mkv, webm, avi, mov, m4a, ogg
 
    Alias: wtranscriptor
 

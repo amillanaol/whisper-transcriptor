@@ -20,7 +20,7 @@ Invoke-whisper-transcriptor [[-Directory] <string>] [[-Model] <string>]
 | :--- | :--- | :--- | :--- | :--- |
 | `-Directory` | string | d | (actual) | Ruta al directorio con videos |
 | `-Model` | string | m | tiny | Modelo de Whisper |
-| `-Extension` | string | e | mp4 | Extension de archivos |
+| `-Extension` | string | e | mp4 | Extension de archivos (mp4/mkv/webm/avi/mov/m4a/ogg) |
 | `-Device` | string | dev | cpu | Dispositivo (cpu/cuda) |
 | `-Version` | switch | v | - | Mostrar version |
 | `-Help` | switch | h | - | Mostrar ayuda |

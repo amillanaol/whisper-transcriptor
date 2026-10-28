@@ -40,7 +40,7 @@ El módulo **whisper-transcriptor** es una solución de PowerShell que automatiz
 
 - **Directory** (`-d`): Directorio de archivos de video (por defecto: `./inputs`)
 - **Model** (`-m`): Modelo de Whisper a utilizar (tiny, small, base, medium, turbo)
-- **Extension** (`-e`): Extensión de archivos a procesar (mp4, mkv, webm)
+- **Extension** (`-e`): Extensión de archivos a procesar (mp4, mkv, webm, avi, mov, m4a, ogg)
 - **Version** (`-v`): Muestra la versión del módulo
 - **Help**: Muestra información de ayuda
 
